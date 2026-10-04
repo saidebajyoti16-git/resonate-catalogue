@@ -6,6 +6,7 @@ Server-side Spotify public/embed metadata proxy for Jammify/Resonate.
 
 - `GET /api/health`
 - `GET /api/playlist?id=SPOTIFY_PLAYLIST_ID`
+- `GET /api/image?url=SPOTIFY_CDN_IMAGE_URL`
 
 ## Deploy
 
@@ -27,3 +28,14 @@ If this replaces an existing Vercel project:
 `https://resonate-catalogue.vercel.app/api/health`
 
 `https://resonate-catalogue.vercel.app/api/playlist?id=37i9dQZF1DXcBWIGoYBM5M`
+
+
+### Image proxy
+
+The playlist endpoint now also returns `imageProxy` URLs. These are served by `/api/image` so browsers that cannot directly reach Spotify CDN hosts can still display Spotify artwork through this Vercel deployment. The image proxy only accepts Spotify CDN hostnames.
+
+
+## Jammify integration
+
+For Jammify, use `SPOTIFY_CATALOGUE_API_URL=https://resonate-catalogue.vercel.app`.
+The `/api/playlist` response includes `image` and `imageProxy`; Jammify should prefer `imageProxy` for Spotify CDN artwork.

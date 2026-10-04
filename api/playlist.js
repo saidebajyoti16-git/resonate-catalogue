@@ -1,5 +1,16 @@
 const CACHE_CONTROL = "public, s-maxage=300, stale-while-revalidate=3600";
 
+function publicOrigin(req) {
+  const proto = String(req.headers?.["x-forwarded-proto"] || "https").split(",")[0].trim();
+  const host = req.headers?.["x-forwarded-host"] || req.headers?.host || "resonate-catalogue.vercel.app";
+  return `${proto}://${host}`.replace(/\/$/, "");
+}
+
+function proxiedImageUrl(origin, imageUrl) {
+  if (!imageUrl || !/^https?:\/\//i.test(String(imageUrl))) return null;
+  return `${origin}/api/image?url=${encodeURIComponent(imageUrl)}`;
+}
+
 function sendJson(res, status, payload) {
   res.status(status);
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -206,6 +217,7 @@ function normalizeTrack(item, playlistImage = null) {
         item.data?.images ||
         item.data?.coverArt
       ) || playlistImage,
+    imageProxy: null,
     duration_ms: Math.round(durationMs),
     explicit: Boolean(
       track.isExplicit ??
@@ -265,7 +277,7 @@ function extractTracksFromHtml(nextData, html, playlistImage = null) {
   return tracks;
 }
 
-function extractPlaylist(nextData, html, id) {
+function extractPlaylist(nextData, html, id, origin) {
   const entity = findPlaylistEntity(nextData);
   const trackList = entity?.trackList?.length ? entity.trackList : findFirstTrackList(nextData);
 
@@ -302,16 +314,23 @@ function extractPlaylist(nextData, html, id) {
     uniqueTracks.push(track);
   }
 
+  const playlistImageProxy = proxiedImageUrl(origin, playlistImage);
+  const proxiedTracks = uniqueTracks.map((track) => ({
+    ...track,
+    imageProxy: proxiedImageUrl(origin, track.image || playlistImage),
+  }));
+
   return {
     id,
     uri: `spotify:playlist:${id}`,
-    name: decodeHtml(String(title || `Spotify track ${String(id || uri || '').slice(-6)}`)),
+    name: decodeHtml(String(title || `Spotify Playlist ${id}`)),
     description: decodeHtml(String(description)),
     image: playlistImage,
+    imageProxy: playlistImageProxy,
     owner: owner ? decodeHtml(String(owner)) : null,
-    tracks: uniqueTracks,
-    trackCount: uniqueTracks.length,
-    truncated: uniqueTracks.length >= 100,
+    tracks: proxiedTracks,
+    trackCount: proxiedTracks.length,
+    truncated: proxiedTracks.length >= 100,
   };
 }
 
@@ -378,7 +397,7 @@ export default async function handler(req, res) {
       return;
     }
 
-    const playlist = extractPlaylist(nextData, html, id);
+    const playlist = extractPlaylist(nextData, html, id, publicOrigin(req));
 
     sendJson(res, 200, {
       ok: true,
