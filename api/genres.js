@@ -1,6 +1,6 @@
 const CACHE_CONTROL = "public, s-maxage=3600, stale-while-revalidate=86400";
 const SPOTIFY_API = "https://api.spotify.com/v1/browse/categories";
-const SPOTIFY_BROWSE_PAGE = "https://open.spotify.com/genre";
+const SPOTIFY_BROWSE_PAGE = "https://open.spotify.com/browse";
 
 const FALLBACK_CATEGORIES = [
   { id: "pop", name: "Pop" },
@@ -110,6 +110,10 @@ async function fetchPublicBrowseCategories() {
     signal: AbortSignal.timeout(12000),
   });
   if (!response.ok) throw new Error(`Spotify public browse page failed (${response.status})`);
+  const finalUrl = new URL(response.url || SPOTIFY_BROWSE_PAGE);
+  if (finalUrl.pathname.startsWith("/search")) {
+    throw new Error("Spotify redirected /browse to /search; live browse categories are not exposed on the public page");
+  }
   const html = await response.text();
   const found = [];
 
