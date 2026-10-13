@@ -1,6 +1,11 @@
 const CACHE_CONTROL = "public, max-age=86400, s-maxage=604800, stale-while-revalidate=2592000";
 const ALLOWED_HOSTS = new Set(["i.scdn.co", "mosaic.scdn.co", "image-cdn-ak.spotifycdn.com"]);
 
+function isAllowedArtworkHost(hostname) {
+  const host = String(hostname || "").toLowerCase().replace(/\\.$/, "");
+  return ALLOWED_HOSTS.has(host) || host.endsWith(".scdn.co") || host.endsWith(".spotifycdn.com");
+}
+
 function sendError(res, status, message) {
   res.statusCode = status;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
@@ -24,7 +29,7 @@ export default async function handler(req, res) {
     return sendError(res, 400, "Provide an absolute Spotify artwork URL in the url query parameter.");
   }
 
-  if (imageUrl.protocol !== "https:" || !ALLOWED_HOSTS.has(imageUrl.hostname.toLowerCase())) {
+  if (imageUrl.protocol !== "https:" || !isAllowedArtworkHost(imageUrl.hostname)) {
     return sendError(res, 400, "Only approved Spotify artwork hosts can be proxied.");
   }
 
@@ -37,7 +42,7 @@ export default async function handler(req, res) {
     if (!upstream.ok) return sendError(res, 502, "Spotify artwork host returned HTTP " + upstream.status);
 
     const finalUrl = new URL(upstream.url);
-    if (finalUrl.protocol !== "https:" || !ALLOWED_HOSTS.has(finalUrl.hostname.toLowerCase())) {
+    if (finalUrl.protocol !== "https:" || !isAllowedArtworkHost(finalUrl.hostname)) {
       return sendError(res, 502, "Artwork redirect was not to an approved Spotify image host.");
     }
 
