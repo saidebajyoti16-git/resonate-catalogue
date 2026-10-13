@@ -39,3 +39,26 @@ The playlist endpoint now also returns `imageProxy` URLs. These are served by `/
 
 For Jammify, use `SPOTIFY_CATALOGUE_API_URL=https://resonate-catalogue.vercel.app`.
 The `/api/playlist` response includes `image` and `imageProxy`; Jammify should prefer `imageProxy` for Spotify CDN artwork.
+
+
+## Live Spotify genres and browse categories
+
+- `GET /api/genres?country=IN` returns Spotify Browse categories when available.
+- Source order: authenticated Spotify Web API, Spotify's public browse page, then a clearly labelled static fallback.
+- The JSON response includes `source` (`spotify-web-api`, `spotify-public-browse`, or `static-fallback`) and category-level `source` values.
+- The endpoint caches results at the CDN for 15 minutes.
+
+### Optional Spotify API credentials
+
+Add these Environment Variables to the Vercel project to enable the official API attempt:
+
+- `SPOTIFY_CLIENT_ID`
+- `SPOTIFY_CLIENT_SECRET`
+
+Create/manage these credentials in the Spotify Developer Dashboard. Keep both variables server-side; do not prefix them with `NEXT_PUBLIC_`.
+
+The Spotify Web API's available endpoints and access rules can change by app/account. If the official endpoint is unavailable, the fetcher tries the public browse page and labels any static fallback explicitly.
+
+Test after deployment:
+
+`https://resonate-catalogue.vercel.app/api/genres?country=IN`
