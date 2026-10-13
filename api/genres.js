@@ -192,7 +192,7 @@ export default async function handler(req, res) {
       if (!response.ok) return "";
       const payload = await response.json();
       const artwork = payload.results?.find((item) => item.artworkUrl100)?.artworkUrl100 || "";
-      return artwork.replace(/\\/\\d+x\\d+bb\\.(jpg|png|jpeg)(\\?.*)?$/i, "/600x600bb.$1$2");
+      return artwork.replace(/\d+x\d+bb\.(jpg|png|jpeg)(\?.*)?$/i, "/600x600bb.$1$2");
     } catch {
       return "";
     }
