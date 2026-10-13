@@ -133,6 +133,116 @@ function spotifyIdFromUri(uri) {
   return match?.[1] || null;
 }
 
+function normalizeMatchText(value = "") {
+  return decodeHtml(String(value))
+    .normalize("NFD")
+    .replace(/[\\u0300-\\u036f]/g, "")
+    .toLowerCase()
+    .replace(/\\([^)]*\\)|\\[[^\\]]*\\]/g, " ")
+    .replace(/[^a-z0-9\\s]/g, " ")
+    .replace(/\\s+/g, " ")
+    .trim();
+}
+
+function textSimilarity(a, b) {
+  const left = normalizeMatchText(a);
+  const right = normalizeMatchText(b);
+  if (!left || !right) return 0;
+  if (left === right) return 1;
+  if (left.includes(right) || right.includes(left)) return Math.min(left.length, right.length) / Math.max(left.length, right.length) * 0.15 + 0.8;
+  const aTokens = new Set(left.split(" "));
+  const bTokens = new Set(right.split(" "));
+  const intersection = [...aTokens].filter((token) => bTokens.has(token)).length;
+  return intersection / Math.max(1, new Set([...aTokens, ...bTokens]).size);
+}
+
+function jioImage(candidate) {
+  return firstImage(
+    candidate?.image ||
+    candidate?.images ||
+    candidate?.album?.image ||
+    candidate?.album?.images ||
+    candidate?.more_info?.image
+  );
+}
+
+function jioAlbum(candidate) {
+  return typeof candidate?.album === "string"
+    ? candidate.album
+    : candidate?.album?.name || candidate?.more_info?.album || "";
+}
+
+async function enrichTrackFromJioSaavn(track) {
+  if (!track?.name || !track?.artists) return track;
+  if (track.album && track.duration_ms > 0 && track.image && track.image !== track._playlistImage) return track;
+
+  const query = `${track.name} ${track.artists}`.trim();
+  try {
+    const response = await fetch(
+      `https://elitejiosaavn-api.vercel.app/api/search/songs?query=${encodeURIComponent(query)}&limit=8`,
+      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5000) }
+    );
+    if (!response.ok) return track;
+    const payload = await response.json();
+    const candidates = payload?.data?.results || payload?.results || [];
+    let best = null;
+    let bestScore = 0;
+
+    for (const candidate of candidates) {
+      const candidateTitle = candidate?.name || candidate?.title || "";
+      const candidateArtist = candidate?.artists?.primary?.map((artist) => artist?.name).filter(Boolean).join(", ")
+        || candidate?.primaryArtists
+        || candidate?.more_info?.primary_artists
+        || candidate?.artist
+        || "";
+      const titleScore = textSimilarity(track.name, candidateTitle);
+      const artistScore = textSimilarity(track.artists, candidateArtist);
+      const score = titleScore * 0.72 + artistScore * 0.28;
+      if (score > bestScore) {
+        best = candidate;
+        bestScore = score;
+      }
+    }
+
+    // Require a strong title match and a reasonable artist match to avoid
+    // attaching metadata from a different song with a similar name.
+    if (!best || textSimilarity(track.name, best.name || best.title || "") < 0.68 || bestScore < 0.62) {
+      return track;
+    }
+
+    const durationSeconds = Number(best.duration ?? best.more_info?.duration ?? 0);
+    const candidateDurationMs = Number(best.duration_ms ?? best.durationMs ?? 0);
+    const durationMs = candidateDurationMs > 0
+      ? (candidateDurationMs < 10000 ? candidateDurationMs * 1000 : candidateDurationMs)
+      : (durationSeconds > 0 ? durationSeconds * 1000 : 0);
+    const artwork = jioImage(best);
+
+    return {
+      ...track,
+      album: track.album || jioAlbum(best),
+      duration_ms: track.duration_ms > 0 ? track.duration_ms : Math.round(durationMs),
+      image: (track.image && track.image !== track._playlistImage) ? track.image : (artwork || track.image),
+      metadataSource: "jiosaavn",
+    };
+  } catch {
+    return track;
+  }
+}
+
+async function enrichTracks(tracks, playlistImage) {
+  const queue = tracks.map((track) => ({ ...track, _playlistImage: playlistImage }));
+  const result = new Array(queue.length);
+  let nextIndex = 0;
+  const worker = async () => {
+    while (nextIndex < queue.length) {
+      const index = nextIndex++;
+      result[index] = await enrichTrackFromJioSaavn(queue[index]);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(8, queue.length) }, () => worker()));
+  return result.map(({ _playlistImage, ...track }) => track);
+}
+
 function normalizeTrack(item, playlistImage = null) {
   if (!item || typeof item !== "object") return null;
 
@@ -333,9 +443,10 @@ function extractPlaylist(nextData, html, id, origin) {
   }
 
   const uniqueTracks = [...tracksByKey.values()];
+  const enrichedTracks = await enrichTracks(uniqueTracks, playlistImage);
 
   const playlistImageProxy = proxiedImageUrl(origin, playlistImage);
-  const proxiedTracks = uniqueTracks.map((track) => ({
+  const proxiedTracks = enrichedTracks.map((track) => ({
     ...track,
     imageProxy: proxiedImageUrl(origin, track.image || playlistImage),
   }));
