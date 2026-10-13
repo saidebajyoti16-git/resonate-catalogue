@@ -47,7 +47,7 @@ function normalizeGenre(item, index, source) {
     order: index,
     source,
     isStatic: false,
-    query: item?.query || item?.url || name,
+    query: item?.query || name,
     jiosaavnUrl: item?.url || null,
   };
 }
