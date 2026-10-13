@@ -302,21 +302,37 @@ function extractPlaylist(nextData, html, id, origin) {
 
   const owner = entity?.subtitle || entity?.owner?.name || entity?.owner?.display_name || null;
 
-  let tracks = trackList.map((item) => normalizeTrack(item, playlistImage)).filter(Boolean);
+  // Spotify's embed can contain a compact playlist trackList alongside richer
+  // track entities elsewhere in __NEXT_DATA__. Merge both sources by Spotify URI
+  // so compact entries do not hide album, duration, and track-specific artwork.
+  const compactTracks = trackList
+    .map((item) => normalizeTrack(item, playlistImage))
+    .filter(Boolean);
+  const richTracks = extractTracksFromHtml(nextData, html, playlistImage);
+  const tracksByKey = new Map();
 
-  if (!tracks.length) {
-    tracks = extractTracksFromHtml(nextData, html, playlistImage);
+  for (const track of [...compactTracks, ...richTracks]) {
+    const key = track.uri || track.id || (track.name + '::' + track.artists);
+    if (!key) continue;
+    const previous = tracksByKey.get(key);
+    if (!previous) {
+      tracksByKey.set(key, track);
+      continue;
+    }
+
+    tracksByKey.set(key, {
+      ...previous,
+      ...track,
+      name: track.name && !/^Spotify track /.test(track.name) ? track.name : previous.name,
+      artists: track.artists || previous.artists,
+      album: track.album || previous.album,
+      image: (track.image && track.image !== playlistImage) ? track.image : (previous.image || track.image),
+      duration_ms: track.duration_ms > 0 ? track.duration_ms : previous.duration_ms,
+      explicit: track.explicit || previous.explicit,
+    });
   }
 
-  const uniqueTracks = [];
-  const seen = new Set();
-
-  for (const track of tracks) {
-    const key = track.uri || track.id || `${track.name}::${track.artists}`;
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    uniqueTracks.push(track);
-  }
+  const uniqueTracks = [...tracksByKey.values()];
 
   const playlistImageProxy = proxiedImageUrl(origin, playlistImage);
   const proxiedTracks = uniqueTracks.map((track) => ({
