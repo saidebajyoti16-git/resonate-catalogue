@@ -41,14 +41,13 @@ function decodeHtml(value = "") {
 }
 
 function meta(html, key) {
-  const escaped = key.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const patterns = [
-    new RegExp('<meta[^>]+property=["\\']' + escaped + '["\\'][^>]+content=["\\']([^"\\']+)["\\'][^>]*>', "i"),
-    new RegExp('<meta[^>]+content=["\\']([^"\\']+)["\\'][^>]+property=["\\']' + escaped + '["\\'][^>]*>', "i"),
-  ];
-  for (const re of patterns) {
-    const match = html.match(re);
-    if (match?.[1]) return decodeHtml(match[1]);
+  const tags = String(html || "").match(/<meta\\b[^>]*>/gi) || [];
+  for (const tag of tags) {
+    const property = tag.match(/\\bproperty=["']([^"']+)["']/i)?.[1];
+    const name = tag.match(/\\bname=["']([^"']+)["']/i)?.[1];
+    if (property !== key && name !== key) continue;
+    const content = tag.match(/\\bcontent=["']([^"']*)["']/i)?.[1];
+    if (content) return decodeHtml(content);
   }
   return "";
 }
