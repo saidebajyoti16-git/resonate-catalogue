@@ -180,7 +180,7 @@ async function enrichTrackFromJioSaavn(track) {
   try {
     const response = await fetch(
       `https://elitejiosaavn-api.vercel.app/api/search/songs?query=${encodeURIComponent(query)}&limit=8`,
-      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(5000) }
+      { headers: { Accept: "application/json" }, signal: AbortSignal.timeout(2500) }
     );
     if (!response.ok) return track;
     const payload = await response.json();
@@ -204,11 +204,7 @@ async function enrichTrackFromJioSaavn(track) {
       }
     }
 
-    // Require a strong title match and a reasonable artist match to avoid
-    // attaching metadata from a different song with a similar name.
-    if (!best || textSimilarity(track.name, best.name || best.title || "") < 0.68 || bestScore < 0.62) {
-      return track;
-    }
+    if (!best || textSimilarity(track.name, best.name || best.title || "") < 0.68 || bestScore < 0.62) return track;
 
     const durationSeconds = Number(best.duration ?? best.more_info?.duration ?? 0);
     const candidateDurationMs = Number(best.duration_ms ?? best.durationMs ?? 0);
