@@ -1,5 +1,11 @@
 const CACHE_CONTROL = "public, s-maxage=3600, stale-while-revalidate=86400";
 const SPOTIFY_HOSTS = new Set(["open.spotify.com", "spotify.com", "www.spotify.com"]);
+const CATALOGUE_ORIGIN = "https://resonate-catalogue.vercel.app";
+
+function proxiedArtwork(url) {
+  if (!url) return "";
+  return CATALOGUE_ORIGIN + "/api/image-proxy?url=" + encodeURIComponent(url);
+}
 
 function send(res, status, payload) {
   res.statusCode = status;
@@ -22,10 +28,10 @@ function safeText(value = "") {
 }
 
 function meta(html, property) {
-  const tags = html.match(/<meta\\b[^>]*>/gi) || [];
+  const tags = html.match(/<meta\b[^>]*>/gi) || [];
   for (const tag of tags) {
     const attrs = {};
-    const attrPattern = /([^\\s=]+)\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))/g;
+    const attrPattern = /([^\s=]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]+))/g;
     let match;
     while ((match = attrPattern.exec(tag))) {
       attrs[match[1].toLowerCase()] = match[2] ?? match[3] ?? match[4] ?? "";
@@ -85,7 +91,7 @@ export default async function handler(req, res) {
       if (body?.thumbnail_url) {
         return send(res, 200, {
           success: true, source: "spotify-oembed", type: kind,
-          title: body.title || "", thumbnail: body.thumbnail_url,
+          title: body.title || "", thumbnail: proxiedArtwork(body.thumbnail_url), originalThumbnail: body.thumbnail_url,
           spotifyUrl: spotifyUrl.toString(), embedUrl: "https://open.spotify.com/embed" + spotifyUrl.pathname,
           width: body.width || null, height: body.height || null,
           attribution: "Spotify", diagnostics,
@@ -117,7 +123,7 @@ export default async function handler(req, res) {
     if (!thumbnail && !title) throw new Error("Spotify page did not expose public title or artwork metadata");
     return send(res, 200, {
       success: true, source: "spotify-public-page", type: kind,
-      title, description, thumbnail,
+      title, description, thumbnail: proxiedArtwork(thumbnail), originalThumbnail: thumbnail,
       spotifyUrl: spotifyUrl.toString(), embedUrl: "https://open.spotify.com/embed" + spotifyUrl.pathname,
       attribution: "Spotify", diagnostics,
     });
