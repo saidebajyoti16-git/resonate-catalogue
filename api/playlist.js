@@ -439,7 +439,9 @@ function extractPlaylist(nextData, html, id, origin) {
   }
 
   const uniqueTracks = [...tracksByKey.values()];
-  const enrichedTracks = await enrichTracks(uniqueTracks, playlistImage);
+  // Keep this endpoint fast and stable while metadata enrichment is debugged.
+  // Enrichment will be moved to a separate endpoint after the base catalogue is verified.
+  const enrichedTracks = uniqueTracks;
 
   const playlistImageProxy = proxiedImageUrl(origin, playlistImage);
   const proxiedTracks = enrichedTracks.map((track) => ({
