@@ -1,4 +1,4 @@
-const CACHE_CONTROL = "public, s-maxage=900, stale-while-revalidate=3600";
+const CACHE_CONTROL = "public, s-maxage=3600, stale-while-revalidate=86400";
 const SPOTIFY_API = "https://api.spotify.com/v1/browse/categories";
 const SPOTIFY_BROWSE_PAGE = "https://open.spotify.com/genre";
 
@@ -175,14 +175,68 @@ export default async function handler(req, res) {
     errors.push({ source: "spotify-public-browse", message: error.message });
   }
 
-  const data = FALLBACK_CATEGORIES.map((item, index) => normalizeCategory(item, index, "static-fallback"));
+  // Spotify category browsing is unavailable without valid credentials, so
+  // keep the fallback category list but enrich each card with real Apple catalogue artwork.
+  async function lookupArtwork(category) {
+    const params = new URLSearchParams({
+      term: category.term,
+      entity: "musicTrack",
+      limit: "1",
+      country,
+    });
+    try {
+      const response = await fetch(`https://itunes.apple.com/search?${params.toString()}`, {
+        headers: { Accept: "application/json" },
+        signal: AbortSignal.timeout(7000),
+      });
+      if (!response.ok) return "";
+      const payload = await response.json();
+      const artwork = payload.results?.find((item) => item.artworkUrl100)?.artworkUrl100 || "";
+      return artwork.replace(/\\/\\d+x\\d+bb\\.(jpg|png|jpeg)(\\?.*)?$/i, "/600x600bb.$1$2");
+    } catch {
+      return "";
+    }
+  }
+
+  const enrichedCategories = [];
+  for (let start = 0; start < FALLBACK_CATEGORIES.length; start += 5) {
+    const batch = FALLBACK_CATEGORIES.slice(start, start + 5);
+    const results = await Promise.all(batch.map(async (item, offset) => ({
+      ...item,
+      description: "",
+      coverImage: await lookupArtwork({
+        ...item,
+        term: ({
+          pop: "pop hits", hiphop: "hip hop hits", rock: "rock hits",
+          edm_dance: "electronic dance music", rnb: "rnb soul hits",
+          indie_alt: "indie alternative hits", mood: "mood music hits",
+          party: "party hits", chill: "chill relaxing music",
+          workout: "workout motivation music", focus: "focus concentration music",
+          sleep: "sleep ambient music", romance: "romantic love songs",
+          decades: "greatest hits classic songs", classical: "classical music",
+          jazz: "jazz classics", country: "country music hits", latin: "latin music hits",
+          reggae: "reggae hits", metal: "heavy metal music",
+        })[item.id] || item.name,
+      }),
+      color: "#1DB954",
+      order: start + offset,
+      source: "apple-itunes-artwork",
+      isStatic: true,
+    })));
+    enrichedCategories.push(...results);
+  }
+
+  const withArtwork = enrichedCategories.filter((item) => item.coverImage).length;
   return send(res, 200, {
     success: true,
-    data,
-    count: data.length,
-    source: "static-fallback",
+    data: enrichedCategories,
+    count: enrichedCategories.length,
+    source: "apple-itunes-artwork",
     country,
-    warning: "Live Spotify categories could not be retrieved; displaying clearly labelled fallback categories.",
-    diagnostics: errors,
+    warning: "Fallback genre categories are shown with artwork from Apple's public iTunes catalogue; these are not live Spotify Browse categories.",
+    diagnostics: [
+      ...errors,
+      { source: "apple-itunes-artwork", message: `${withArtwork}/${enrichedCategories.length} categories have artwork` },
+    ],
   });
 }
