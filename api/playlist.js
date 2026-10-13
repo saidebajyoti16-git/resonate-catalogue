@@ -242,37 +242,41 @@ function extractTracksFromHtml(nextData, html, playlistImage = null) {
     tracks.push(normalized);
   };
 
-  for (const match of String(html || '').matchAll(/spotify:track:([A-Za-z0-9]{22})/g)) {
-    add({ uri: `spotify:track:${match[1]}`, title: null });
-  }
-
-  const escaped = String(html || '').replace(/\\u0022/g, '"').replace(/\\"/g, '"');
-  for (const match of escaped.matchAll(/"(?:uri|track_uri)"\s*:\s*"(spotify:track:[A-Za-z0-9]{22})"/g)) {
-    add({ uri: match[1], title: `Spotify track ${match[1].slice(-6)}` });
-  }
-
-  if (tracks.length) return tracks;
-
-  const stateCandidates = [nextData];
+  // Prefer rich embedded track entities so title, artist, album, artwork and
+  // duration are retained. URI-only matches are a last-resort fallback.
   const stack = [nextData];
   const visited = new Set();
   while (stack.length) {
     const value = stack.pop();
-    if (!value || typeof value !== 'object' || visited.has(value)) continue;
+    if (!value || typeof value !== "object" || visited.has(value)) continue;
     visited.add(value);
+
     if (Array.isArray(value)) {
       for (const item of value) stack.push(item);
       continue;
     }
-    for (const [key, value] of Object.entries(value)) {
-      if (/track|item|data|entity/i.test(key)) stateCandidates.push(value);
-      if (value && typeof value === 'object') stack.push(value);
+
+    const uri = value.uri || value.trackUri || value.track_uri;
+    const hasSpotifyTrackUri = /^spotify:track:[A-Za-z0-9]{22}$/.test(String(uri || ""));
+    const hasTrackMetadata = Boolean(
+      value.name || value.title || value.artists || value.subtitle ||
+      value.album || value.albumOfTrack || value.duration_ms || value.durationMs
+    );
+    if (hasSpotifyTrackUri && hasTrackMetadata) add(value);
+
+    for (const child of Object.values(value)) {
+      if (child && typeof child === "object") stack.push(child);
     }
   }
-  for (const candidate of stateCandidates) {
-    if (!candidate || typeof candidate !== 'object') continue;
-    const parsed = normalizeTrack(candidate, playlistImage);
-    if (parsed) add(parsed);
+
+  if (tracks.length) return tracks;
+
+  const uriMatches = new Set();
+  for (const match of String(html || "").matchAll(/spotify:track:([A-Za-z0-9]{22})/g)) {
+    uriMatches.add(match[1]);
+  }
+  for (const id of uriMatches) {
+    add({ uri: `spotify:track:${id}`, title: `Spotify track ${id.slice(-6)}` });
   }
   return tracks;
 }
