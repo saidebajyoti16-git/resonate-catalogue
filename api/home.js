@@ -52,6 +52,31 @@ function meta(html, key) {
   return "";
 }
 
+function findPlaylistEntity(node, seen = new Set()) {
+  if (!node || typeof node !== "object" || seen.has(node)) return null;
+  seen.add(node);
+  if (Array.isArray(node.trackList) && typeof node.name === "string") return node;
+  for (const value of Array.isArray(node) ? node : Object.values(node)) {
+    const found = findPlaylistEntity(value, seen);
+    if (found) return found;
+  }
+  return null;
+}
+
+function imageFrom(value) {
+  if (!value) return "";
+  if (typeof value === "string") return /^https?:\\/\\//i.test(value) ? value : "";
+  if (Array.isArray(value)) {
+    for (const item of value) {
+      const found = imageFrom(item);
+      if (found) return found;
+    }
+    return "";
+  }
+  return imageFrom(value.url || value.href || value.src || value.image || value.images ||
+    value.coverArt || value.coverImage || value.sources || value.items);
+}
+
 async function fetchPlaylistCard(playlist, origin) {
   const spotifyUrl = `https://open.spotify.com/playlist/${playlist.id}`;
   try {
@@ -66,12 +91,20 @@ async function fetchPlaylistCard(playlist, origin) {
     });
     if (!response.ok) throw new Error(`Spotify returned ${response.status}`);
     const html = await response.text();
+    let nextData = null;
+    const dataMatch = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\\s\\S]*?)<\\/script>/i);
+    if (dataMatch?.[1]) {
+      try { nextData = JSON.parse(dataMatch[1]); } catch {}
+    }
+    const entity = findPlaylistEntity(nextData);
+    const image = imageFrom(entity?.image || entity?.images || entity?.coverImage || entity?.coverArt) ||
+      meta(html, "og:image") || meta(html, "twitter:image") || "";
     return {
       id: playlist.id,
       spotifyId: playlist.id,
-      name: meta(html, "og:title").replace(/\s*[|–-]\s*Spotify.*$/i, "") || playlist.label,
-      description: meta(html, "og:description"),
-      image: meta(html, "og:image") || meta(html, "twitter:image") || "",
+      name: entity?.name || meta(html, "og:title").replace(/\s*[|–-]\s*Spotify.*$/i, "") || playlist.label,
+      description: entity?.description || meta(html, "og:description"),
+      image,
       spotifyUrl,
       embedUrl: `https://open.spotify.com/embed/playlist/${playlist.id}`,
       source: "spotify-public-embed",
