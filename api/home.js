@@ -65,7 +65,7 @@ function findPlaylistEntity(node, seen = new Set()) {
 
 function imageFrom(value) {
   if (!value) return "";
-  if (typeof value === "string") return /^https?:\\/\\//i.test(value) ? value : "";
+  if (typeof value === "string") return /^https?:\/\//i.test(value) ? value : "";
   if (Array.isArray(value)) {
     for (const item of value) {
       const found = imageFrom(item);
@@ -92,7 +92,7 @@ async function fetchPlaylistCard(playlist, origin) {
     if (!response.ok) throw new Error(`Spotify returned ${response.status}`);
     const html = await response.text();
     let nextData = null;
-    const dataMatch = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\\s\\S]*?)<\\/script>/i);
+    const dataMatch = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
     if (dataMatch?.[1]) {
       try { nextData = JSON.parse(dataMatch[1]); } catch {}
     }
