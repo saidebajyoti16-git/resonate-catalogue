@@ -41,12 +41,12 @@ function decodeHtml(value = "") {
 }
 
 function meta(html, key) {
-  const tags = String(html || "").match(/<meta\\b[^>]*>/gi) || [];
+  const tags = String(html || "").match(/<meta\b[^>]*>/gi) || [];
   for (const tag of tags) {
-    const property = tag.match(/\\bproperty=["']([^"']+)["']/i)?.[1];
-    const name = tag.match(/\\bname=["']([^"']+)["']/i)?.[1];
+    const property = tag.match(/\bproperty=["']([^"']+)["']/i)?.[1];
+    const name = tag.match(/\bname=["']([^"']+)["']/i)?.[1];
     if (property !== key && name !== key) continue;
-    const content = tag.match(/\\bcontent=["']([^"']*)["']/i)?.[1];
+    const content = tag.match(/\bcontent=["']([^"']*)["']/i)?.[1];
     if (content) return decodeHtml(content);
   }
   return "";
@@ -69,7 +69,7 @@ async function fetchPlaylistCard(playlist, origin) {
     return {
       id: playlist.id,
       spotifyId: playlist.id,
-      name: meta(html, "og:title").replace(/\\s*[|–-]\\s*Spotify.*$/i, "") || playlist.label,
+      name: meta(html, "og:title").replace(/\s*[|–-]\s*Spotify.*$/i, "") || playlist.label,
       description: meta(html, "og:description"),
       image: meta(html, "og:image") || meta(html, "twitter:image") || "",
       spotifyUrl,
