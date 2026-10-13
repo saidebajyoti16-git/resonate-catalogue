@@ -22,15 +22,17 @@ function safeText(value = "") {
 }
 
 function meta(html, property) {
-  const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  const patterns = [
-    new RegExp('<meta[^>]+property=["\\']' + escaped + '["\\'][^>]+content=["\\']([^"\\']*)["\\'][^>]*>', "i"),
-    new RegExp('<meta[^>]+content=["\\']([^"\\']*)["\\'][^>]+property=["\\']' + escaped + '["\\'][^>]*>', "i"),
-    new RegExp('<meta[^>]+name=["\\']' + escaped + '["\\'][^>]+content=["\\']([^"\\']*)["\\'][^>]*>', "i"),
-  ];
-  for (const pattern of patterns) {
-    const match = html.match(pattern);
-    if (match?.[1]) return safeText(match[1]);
+  const tags = html.match(/<meta\\b[^>]*>/gi) || [];
+  for (const tag of tags) {
+    const attrs = {};
+    const attrPattern = /([^\\s=]+)\\s*=\\s*(?:"([^"]*)"|'([^']*)'|([^\\s>]+))/g;
+    let match;
+    while ((match = attrPattern.exec(tag))) {
+      attrs[match[1].toLowerCase()] = match[2] ?? match[3] ?? match[4] ?? "";
+    }
+    if ((attrs.property || attrs.name || "").toLowerCase() === property.toLowerCase() && attrs.content) {
+      return safeText(attrs.content);
+    }
   }
   return "";
 }
