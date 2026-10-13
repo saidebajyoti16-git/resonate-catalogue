@@ -187,7 +187,7 @@ export default async function handler(req, res) {
     try {
       const response = await fetch(`https://itunes.apple.com/search?${params.toString()}`, {
         headers: { Accept: "application/json" },
-        signal: AbortSignal.timeout(7000),
+        signal: AbortSignal.timeout(3500),
       });
       if (!response.ok) return "";
       const payload = await response.json();
@@ -198,33 +198,28 @@ export default async function handler(req, res) {
     }
   }
 
-  const enrichedCategories = [];
-  for (let start = 0; start < FALLBACK_CATEGORIES.length; start += 5) {
-    const batch = FALLBACK_CATEGORIES.slice(start, start + 5);
-    const results = await Promise.all(batch.map(async (item, offset) => ({
+  const enrichedCategories = await Promise.all(FALLBACK_CATEGORIES.map(async (item, index) => ({
+    ...item,
+    description: "",
+    coverImage: await lookupArtwork({
       ...item,
-      description: "",
-      coverImage: await lookupArtwork({
-        ...item,
-        term: ({
-          pop: "pop hits", hiphop: "hip hop hits", rock: "rock hits",
-          edm_dance: "electronic dance music", rnb: "rnb soul hits",
-          indie_alt: "indie alternative hits", mood: "mood music hits",
-          party: "party hits", chill: "chill relaxing music",
-          workout: "workout motivation music", focus: "focus concentration music",
-          sleep: "sleep ambient music", romance: "romantic love songs",
-          decades: "greatest hits classic songs", classical: "classical music",
-          jazz: "jazz classics", country: "country music hits", latin: "latin music hits",
-          reggae: "reggae hits", metal: "heavy metal music",
-        })[item.id] || item.name,
-      }),
-      color: "#1DB954",
-      order: start + offset,
-      source: "apple-itunes-artwork",
-      isStatic: true,
-    })));
-    enrichedCategories.push(...results);
-  }
+      term: ({
+        pop: "pop hits", hiphop: "hip hop hits", rock: "rock hits",
+        edm_dance: "electronic dance music", rnb: "rnb soul hits",
+        indie_alt: "indie alternative hits", mood: "mood music hits",
+        party: "party hits", chill: "chill relaxing music",
+        workout: "workout motivation music", focus: "focus concentration music",
+        sleep: "sleep ambient music", romance: "romantic love songs",
+        decades: "greatest hits classic songs", classical: "classical music",
+        jazz: "jazz classics", country: "country music hits", latin: "latin music hits",
+        reggae: "reggae hits", metal: "heavy metal music",
+      })[item.id] || item.name,
+    }),
+    color: "#1DB954",
+    order: index,
+    source: "apple-itunes-artwork",
+    isStatic: true,
+  })));
 
   const withArtwork = enrichedCategories.filter((item) => item.coverImage).length;
   return send(res, 200, {
