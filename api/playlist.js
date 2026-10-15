@@ -193,6 +193,34 @@ function normalizeTrack(item, playlistImage = null) {
   if (!Number.isFinite(durationMs) || durationMs < 0) durationMs = 0;
   if (durationMs > 0 && durationMs < 10000) durationMs *= 1000;
 
+  // Do not let a generic image field (which may be the playlist artwork) mask
+  // a track-specific album cover stored deeper in Spotify's embed entity.
+  const imageCandidates = [
+    track.albumOfTrack?.coverArt,
+    track.album?.images,
+    track.album?.image,
+    track.visuals?.coverArt,
+    track.coverArt,
+    track.images,
+    track.image,
+    item.albumOfTrack?.coverArt,
+    item.album?.images,
+    item.album?.image,
+    item.coverArt,
+    item.images,
+    item.image,
+    item.data?.albumOfTrack?.coverArt,
+    item.data?.album?.images,
+    item.data?.coverArt,
+    item.data?.images,
+    item.data?.image,
+  ];
+  const trackImage = imageCandidates
+    .map((candidate) => firstImage(candidate))
+    .find((candidate) => candidate && candidate !== playlistImage) ||
+    imageCandidates.map((candidate) => firstImage(candidate)).find(Boolean) ||
+    playlistImage || null;
+
   return {
     id,
     uri,
@@ -214,23 +242,7 @@ function normalizeTrack(item, playlistImage = null) {
         ""
       )
     ),
-    image:
-      firstImage(
-        track.image ||
-        track.images ||
-        track.coverArt ||
-        track.albumOfTrack?.coverArt ||
-        track.visuals?.coverArt ||
-        track.albumOfTrack?.coverArt ||
-        track.album?.images ||
-        track.album?.image ||
-        item.image ||
-        item.images ||
-        item.coverArt ||
-        item.data?.image ||
-        item.data?.images ||
-        item.data?.coverArt
-      ) || playlistImage,
+    image: trackImage,
     imageProxy: null,
     duration_ms: Math.round(durationMs),
     explicit: Boolean(
