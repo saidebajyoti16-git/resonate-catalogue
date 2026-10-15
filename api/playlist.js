@@ -31,28 +31,27 @@ function decodeHtml(value = "") {
     .replace(/&#x2F;|&#47;/g, "/");
 }
 
-function firstImage(value) {
+function firstImage(value, seen = new Set()) {
   if (!value) return null;
-  if (typeof value === "string" && /^https?:\/\//i.test(value)) return value;
-  if (Array.isArray(value)) {
-    for (const item of value) {
-      const found = firstImage(item);
+  if (typeof value === "string") {
+    const decoded = decodeHtml(value);
+    return /^https?:\/\//i.test(decoded) ? decoded : null;
+  }
+  if (typeof value !== "object" || seen.has(value)) return null;
+  seen.add(value);
+
+  // Spotify embed artwork commonly uses { sources: [{ url, width, height }] }.
+  // Search all likely artwork fields first, then recurse through remaining values.
+  const preferred = ["url", "href", "src", "imageUrl", "image_url", "coverImageUrl", "sources", "items", "images", "image", "coverArt", "visuals"];
+  for (const key of preferred) {
+    if (Object.prototype.hasOwnProperty.call(value, key)) {
+      const found = firstImage(value[key], seen);
       if (found) return found;
     }
-    return null;
   }
-  if (typeof value === "object") {
-    return firstImage(
-      value.url ||
-      value.href ||
-      value.src ||
-      value.image ||
-      value.images ||
-      value.coverImageUrl ||
-      value.coverArt ||
-      value.sources ||
-      value.items
-    );
+  for (const child of Object.values(value)) {
+    const found = firstImage(child, seen);
+    if (found) return found;
   }
   return null;
 }
@@ -169,7 +168,9 @@ function normalizeTrack(item, playlistImage = null) {
     item.data?.artist ||
     (Array.isArray(track.artists)
       ? track.artists.map((a) => a?.name || a?.profile?.name).filter(Boolean).join(", ")
-      : "");
+      : Array.isArray(track.artists?.items)
+        ? track.artists.items.map((a) => a?.name || a?.profile?.name).filter(Boolean).join(", ")
+        : "");
 
   if ((!title && !uri) || (!id && !uri)) return null;
 
@@ -181,6 +182,12 @@ function normalizeTrack(item, playlistImage = null) {
     item.durationMs ??
     item.data?.duration_ms ??
     item.data?.durationMs ??
+    track.duration?.totalMilliseconds ??
+    track.duration?.milliseconds ??
+    track.trackDuration?.totalMilliseconds ??
+    track.trackDuration?.milliseconds ??
+    item.duration?.totalMilliseconds ??
+    item.duration?.milliseconds ??
     0
   );
   if (!Number.isFinite(durationMs) || durationMs < 0) durationMs = 0;
@@ -196,6 +203,10 @@ function normalizeTrack(item, playlistImage = null) {
         track.album?.name ||
         track.album?.title ||
         track.albumOfTrack?.name ||
+        track.albumOfTrack?.title ||
+        track.album?.albumName ||
+        track.album?.name ||
+        item.albumOfTrack?.name ||
         item.album?.name ||
         item.album ||
         item.data?.album?.name ||
@@ -210,6 +221,9 @@ function normalizeTrack(item, playlistImage = null) {
         track.coverArt ||
         track.albumOfTrack?.coverArt ||
         track.visuals?.coverArt ||
+        track.albumOfTrack?.coverArt ||
+        track.album?.images ||
+        track.album?.image ||
         item.image ||
         item.images ||
         item.coverArt ||
@@ -326,7 +340,8 @@ function extractPlaylist(nextData, html, id, origin) {
       name: track.name && !/^Spotify track /.test(track.name) ? track.name : previous.name,
       artists: track.artists || previous.artists,
       album: track.album || previous.album,
-      image: (track.image && track.image !== playlistImage) ? track.image : (previous.image || track.image),
+      image: (track.image && track.image !== playlistImage) ? track.image :
+        ((previous.image && previous.image !== playlistImage) ? previous.image : (track.image || previous.image)),
       duration_ms: track.duration_ms > 0 ? track.duration_ms : previous.duration_ms,
       explicit: track.explicit || previous.explicit,
     });
