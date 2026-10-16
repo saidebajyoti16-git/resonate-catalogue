@@ -114,7 +114,7 @@ async function fetchPlaylistCard(playlist, origin) {
     if (!response.ok) throw new Error(`Spotify returned ${response.status}`);
     const html = await response.text();
     let nextData = null;
-    const dataMatch = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\\s\\S]*?)<\\/script>/i);
+    const dataMatch = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\\S]*?)<\/script>/i);
     if (dataMatch?.[1]) {
       try { nextData = JSON.parse(dataMatch[1]); } catch {}
     }
@@ -124,7 +124,7 @@ async function fetchPlaylistCard(playlist, origin) {
     oembed = await fetchOEmbed(playlist.id);
     const image = imageFrom(entity?.image || entity?.images || entity?.coverImage || entity?.coverArt) ||
       meta(html, "og:image") || meta(html, "twitter:image") || oembed?.thumbnail || "";
-    const metaTitle = meta(html, "og:title").replace(/\\s*[|–-]\\s*Spotify.*$/i, "");
+    const metaTitle = meta(html, "og:title").replace(/\s*[|–-]\s*Spotify.*$/i, "");
     return {
       id: playlist.id,
       spotifyId: playlist.id,
