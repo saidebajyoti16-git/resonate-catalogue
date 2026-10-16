@@ -114,17 +114,16 @@ async function fetchPlaylistCard(playlist, origin) {
     if (!response.ok) throw new Error(`Spotify returned ${response.status}`);
     const html = await response.text();
     let nextData = null;
-    const dataMatch = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\\S]*?)<\/script>/i);
+    const dataMatch = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
     if (dataMatch?.[1]) {
       try { nextData = JSON.parse(dataMatch[1]); } catch {}
     }
     const entity = findPlaylistEntity(nextData);
-    // Spotify embed HTML can omit its entity artwork on some responses. oEmbed
-    // is a public, unauthenticated metadata fallback for the title and thumbnail.
-    oembed = await fetchOEmbed(playlist.id);
+    // Prefer artwork embedded in Spotify HTML; use public oEmbed only when metadata is missing.
     const image = imageFrom(entity?.image || entity?.images || entity?.coverImage || entity?.coverArt) ||
-      meta(html, "og:image") || meta(html, "twitter:image") || oembed?.thumbnail || "";
+      meta(html, "og:image") || meta(html, "twitter:image") || "";
     const metaTitle = meta(html, "og:title").replace(/\s*[|–-]\s*Spotify.*$/i, "");
+    if (!image || !metaTitle) oembed = await fetchOEmbed(playlist.id);
     return {
       id: playlist.id,
       spotifyId: playlist.id,
