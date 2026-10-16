@@ -120,10 +120,11 @@ async function fetchPlaylistCard(playlist, origin) {
     }
     const entity = findPlaylistEntity(nextData);
     // Prefer artwork embedded in Spotify HTML; use public oEmbed only when metadata is missing.
-    const image = imageFrom(entity?.image || entity?.images || entity?.coverImage || entity?.coverArt) ||
+    let image = imageFrom(entity?.image || entity?.images || entity?.coverImage || entity?.coverArt) ||
       meta(html, "og:image") || meta(html, "twitter:image") || "";
     const metaTitle = meta(html, "og:title").replace(/\s*[|–-]\s*Spotify.*$/i, "");
     if (!image || !metaTitle) oembed = await fetchOEmbed(playlist.id);
+    if (!image) image = oembed?.thumbnail || "";
     return {
       id: playlist.id,
       spotifyId: playlist.id,
