@@ -77,10 +77,32 @@ function imageFrom(value) {
     value.coverArt || value.coverImage || value.sources || value.items);
 }
 
+async function fetchOEmbed(playlistId) {
+  try {
+    const url = `https://open.spotify.com/oembed?url=${encodeURIComponent(`https://open.spotify.com/playlist/${playlistId}`)}`;
+    const response = await fetch(url, {
+      headers: { Accept: "application/json", "User-Agent": "Mozilla/5.0 (compatible; RESONATE-Catalogue/1.0)" },
+      signal: AbortSignal.timeout(3500),
+      redirect: "follow",
+    });
+    if (!response.ok) return null;
+    const data = await response.json();
+    return {
+      title: typeof data.title === "string" ? decodeHtml(data.title) : "",
+      thumbnail: typeof data.thumbnail_url === "string" ? data.thumbnail_url : "",
+      provider: data.provider_name || "Spotify",
+    };
+  } catch {
+    return null;
+  }
+}
+
 async function fetchPlaylistCard(playlist, origin) {
   const spotifyUrl = `https://open.spotify.com/playlist/${playlist.id}`;
+  const embedUrl = `https://open.spotify.com/embed/playlist/${playlist.id}`;
+  let oembed = null;
   try {
-    const response = await fetch(`https://open.spotify.com/embed/playlist/${playlist.id}`, {
+    const response = await fetch(embedUrl, {
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; RESONATE-Catalogue/1.0)",
         Accept: "text/html,application/xhtml+xml",
@@ -92,36 +114,48 @@ async function fetchPlaylistCard(playlist, origin) {
     if (!response.ok) throw new Error(`Spotify returned ${response.status}`);
     const html = await response.text();
     let nextData = null;
-    const dataMatch = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i);
+    const dataMatch = html.match(/<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\\s\\S]*?)<\\/script>/i);
     if (dataMatch?.[1]) {
       try { nextData = JSON.parse(dataMatch[1]); } catch {}
     }
     const entity = findPlaylistEntity(nextData);
+    // Spotify embed HTML can omit its entity artwork on some responses. oEmbed
+    // is a public, unauthenticated metadata fallback for the title and thumbnail.
+    oembed = await fetchOEmbed(playlist.id);
     const image = imageFrom(entity?.image || entity?.images || entity?.coverImage || entity?.coverArt) ||
-      meta(html, "og:image") || meta(html, "twitter:image") || "";
+      meta(html, "og:image") || meta(html, "twitter:image") || oembed?.thumbnail || "";
+    const metaTitle = meta(html, "og:title").replace(/\\s*[|–-]\\s*Spotify.*$/i, "");
     return {
       id: playlist.id,
       spotifyId: playlist.id,
-      name: entity?.name || meta(html, "og:title").replace(/\s*[|–-]\s*Spotify.*$/i, "") || playlist.label,
-      description: entity?.description || meta(html, "og:description"),
+      name: entity?.name || metaTitle || oembed?.title || playlist.label,
+      description: entity?.description || meta(html, "og:description") || "",
       image,
+      thumbnailUrl: image,
       spotifyUrl,
-      embedUrl: `https://open.spotify.com/embed/playlist/${playlist.id}`,
+      embedUrl,
       source: "spotify-public-embed",
       label: playlist.label,
+      metadataAvailable: Boolean(entity || metaTitle || oembed?.title),
+      artworkAvailable: Boolean(image),
     };
   } catch (error) {
+    oembed = oembed || await fetchOEmbed(playlist.id);
+    const image = oembed?.thumbnail || "";
     return {
       id: playlist.id,
       spotifyId: playlist.id,
-      name: playlist.label,
+      name: oembed?.title || playlist.label,
       description: "",
-      image: "",
+      image,
+      thumbnailUrl: image,
       spotifyUrl,
-      embedUrl: `https://open.spotify.com/embed/playlist/${playlist.id}`,
-      source: "spotify-public-link",
+      embedUrl,
+      source: oembed ? "spotify-public-oembed" : "spotify-public-link",
       label: playlist.label,
-      warning: error?.message || "Spotify metadata unavailable",
+      metadataAvailable: Boolean(oembed?.title),
+      artworkAvailable: Boolean(image),
+      warning: image ? undefined : (error?.message || "Spotify metadata unavailable"),
     };
   }
 }
